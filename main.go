@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/VadimTsoi1/go_final_project/pkg/api"
 	"github.com/VadimTsoi1/go_final_project/pkg/db"
 )
 
@@ -25,10 +26,14 @@ func main() {
 		log.Fatalf("db init failed: %v", err)
 	}
 
+	//регистрация API
+	api.Init()
+
 	// файловый сервер, отдает из ./web
 	fs := http.FileServer(http.Dir(webDir))
 	http.Handle("/", fs)
 
+	//запуск
 	addr := ":" + port
 	log.Printf("server listening on %s, db=%s", addr, dbFile)
 	if err := http.ListenAndServe(addr, nil); err != nil {
