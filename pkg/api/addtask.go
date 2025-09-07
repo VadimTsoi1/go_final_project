@@ -3,18 +3,54 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/VadimTsoi1/go_final_project/pkg/db"
 )
 
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeJSONError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+const dateLayout = "20060102"
+
 type addOK struct {
 	ID string `json:"id"`
 }
+
 type addErr struct {
 	Error string `json:"error"`
+}
+
+var (
+	repeatYear = regexp.MustCompile(`^y$`)
+	repeatDay  = regexp.MustCompile(`^d\s+-?\d+$`)
+	repeatWeek = regexp.MustCompile(`^w\s+[\d,\s]+$`)
+	repeatMon  = regexp.MustCompile(`^m(\s+[\d,\s]+(\s+[\d,\s-]+)?)?$`)
+)
+
+func validRepeat(s string) bool {
+	if s == "" {
+		return true
+	}
+	s = strings.TrimSpace(s)
+	return repeatYear.MatchString(s) ||
+		repeatDay.MatchString(s) ||
+		repeatWeek.MatchString(s) ||
+		repeatMon.MatchString(s)
+}
+
+func todayLocal() time.Time {
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 }
 
 func addTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -23,118 +59,52 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var t db.Task
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		writeJSON(w, http.StatusBadRequest, addErr{Error: err.Error()})
+	// ожидаем JSON с полями-строками
+	var in struct {
+		Date    string `json:"date"`
+		Title   string `json:"title"`
+		Comment string `json:"comment"`
+		Repeat  string `json:"repeat"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, addErr{Error: "bad json"})
 		return
 	}
 
-	// title обязателен
-	t.Title = strings.TrimSpace(t.Title)
-	if t.Title == "" {
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
 		writeJSON(w, http.StatusBadRequest, addErr{Error: "title required"})
 		return
 	}
 
-	// "сегодня" — ЛОКАЛЬНАЯ дата, без времени
-	now := todayLocal()
-
-	// дата: пустая -> сегодня; задана -> должна быть корректной 20060102
-	t.Date = strings.TrimSpace(t.Date)
-	if t.Date == "" {
-		t.Date = now.Format(dateLayout)
+	// дата: "today" или YYYYMMDD
+	var dateStr string
+	if strings.EqualFold(strings.TrimSpace(in.Date), "today") {
+		dateStr = todayLocal().Format(dateLayout)
 	} else {
-		if !isValidDate(t.Date) {
+		if _, err := time.Parse(dateLayout, in.Date); err != nil {
 			writeJSON(w, http.StatusBadRequest, addErr{Error: "bad date"})
 			return
 		}
+		dateStr = in.Date
 	}
 
-	// repeat: допускаем "", "y", "d N" (1..400); остальное — ошибка
-	t.Repeat = strings.TrimSpace(t.Repeat)
-	if t.Repeat != "" && !isValidRepeat(t.Repeat) {
+	// repeat — минимальная валидность
+	if !validRepeat(in.Repeat) {
 		writeJSON(w, http.StatusBadRequest, addErr{Error: "bad repeat"})
 		return
 	}
 
-	// сравнение с сегодняшним днём (ЛОКАЛЬНЫЙ)
-	tDate, _ := time.ParseInLocation(dateLayout, t.Date, time.Local)
-	tDate = normalizeLocal(tDate)
-
-	if tDate.Before(now) { // дата в прошлом
-		if t.Repeat == "" {
-
-			t.Date = now.Format(dateLayout)
-		} else {
-
-			next, err := NextDate(now, t.Date, t.Repeat)
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, addErr{Error: "bad repeat"})
-				return
-			}
-			t.Date = next
-		}
-	} else {
-
-		if t.Repeat != "" {
-			if _, err := NextDate(now, t.Date, t.Repeat); err != nil {
-				writeJSON(w, http.StatusBadRequest, addErr{Error: "bad repeat"})
-				return
-			}
-		}
-	}
-
-	// вставка в БД
-	id, err := db.AddTask(&t)
+	id, err := db.AddTask(&db.Task{
+		Date:    dateStr,
+		Title:   title,
+		Comment: in.Comment,
+		Repeat:  strings.TrimSpace(in.Repeat),
+	})
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, addErr{Error: err.Error()})
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, addOK{ID: strconv.FormatInt(id, 10)})
-}
-
-//helpers
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func isValidDate(s string) bool {
-	if len(s) != 8 {
-		return false
-	}
-	_, err := time.ParseInLocation(dateLayout, s, time.Local)
-	return err == nil
-}
-
-func isValidRepeat(rep string) bool {
-	rep = strings.TrimSpace(rep)
-	if rep == "" {
-		return true
-	}
-	if rep == "y" {
-		return true
-	}
-	parts := strings.Fields(rep)
-	if len(parts) == 2 && parts[0] == "d" {
-		n, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return false
-		}
-		return n >= 1 && n <= 400
-	}
-	return false // w/m не поддерживаем на базовом шаге
-}
-
-// ЛОКАЛЬНЫЙ "сегодня"
-func todayLocal() time.Time {
-	t := time.Now()
-	return normalizeLocal(t)
-}
-
-func normalizeLocal(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	writeJSON(w, http.StatusOK, addOK{ID: id})
 }

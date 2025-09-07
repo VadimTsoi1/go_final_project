@@ -13,27 +13,26 @@ var DB *sql.DB
 
 const schema = `
 CREATE TABLE IF NOT EXISTS scheduler (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	date CHAR(8) NOT NULL DEFAULT "",
-	title VARCHAR(255) NOT NULL DEFAULT "",
-	comment TEXT,
-	repeat VARCHAR(128) NOT NULL DEFAULT ""
+	id      INTEGER PRIMARY KEY AUTOINCREMENT,
+	date    TEXT NOT NULL,
+	title   TEXT NOT NULL,
+	comment TEXT NOT NULL DEFAULT '',
+	repeat  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_scheduler_date ON scheduler(date);
 `
 
-func Init(dbFile string) error {
-	if dbFile == "" {
-		return errors.New("empty db file path")
+// Init открывает файл БД и при install=true применяет схему.
+func Init(filename string, install bool) error {
+	if filename == "" {
+		return errors.New("empty db filename")
 	}
 
-	install := false
-	if _, err := os.Stat(dbFile); err != nil {
-		install = true
+	if err := os.MkdirAll(".", 0o755); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
 	}
 
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", dbFile)
-	conn, err := sql.Open("sqlite", dsn)
+	conn, err := sql.Open("sqlite", filename)
 	if err != nil {
 		return fmt.Errorf("open sqlite: %w", err)
 	}

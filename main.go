@@ -10,34 +10,34 @@ import (
 )
 
 func main() {
-	//web
+	// статические файлы
 	webDir := "./web"
+
+	// порт и БД из окружения
 	port := os.Getenv("TODO_PORT")
 	if port == "" {
-		port = "7540" //порт по умолчанию
+		port = "7540"
 	}
-
-	//db
-	dbFile := os.Getenv("TODO_DBFILE")
+	dbFile := os.Getenv("TODO_DB")
 	if dbFile == "" {
-		dbFile = "scheduler.db"
-	}
-	if err := db.Init(dbFile); err != nil {
-		log.Fatalf("db init failed: %v", err)
+		dbFile = "./scheduler.db"
 	}
 
-	//регистрация API
+	// init DB (+ схема)
+	if err := db.Init(dbFile, true); err != nil {
+		log.Fatalf("db init: %v", err)
+	}
+
+	// регистрируем API
 	api.Init()
 
-	// файловый сервер, отдает из ./web
+	// файловый сервер из ./web
 	fs := http.FileServer(http.Dir(webDir))
 	http.Handle("/", fs)
 
-	//запуск
 	addr := ":" + port
 	log.Printf("server listening on %s, db=%s", addr, dbFile)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
-
 }
