@@ -1,4 +1,4 @@
-module go_final_project
+module github.com/VadimTsoi1/go_final_project
 
 go 1.23.2
 

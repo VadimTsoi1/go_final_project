@@ -4,15 +4,25 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/VadimTsoi1/go_final_project/pkg/db"
 )
 
 func main() {
+	//web
 	webDir := "./web"
-
-	// читаем порт из переменной окружения TODO_PORT
 	port := os.Getenv("TODO_PORT")
 	if port == "" {
 		port = "7540" //порт по умолчанию
+	}
+
+	//db
+	dbFile := os.Getenv("TODO_DBFILE")
+	if dbFile == "" {
+		dbFile = "scheduler.db"
+	}
+	if err := db.Init(dbFile); err != nil {
+		log.Fatalf("db init failed: %v", err)
 	}
 
 	// файловый сервер, отдает из ./web
@@ -20,7 +30,7 @@ func main() {
 	http.Handle("/", fs)
 
 	addr := ":" + port
-	log.Printf("server listening on %s", addr)
+	log.Printf("server listening on %s, db=%s", addr, dbFile)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
