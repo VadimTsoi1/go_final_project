@@ -77,10 +77,6 @@ func addYearSpecial(t time.Time) time.Time {
 
 //HTTP
 
-func Init() {
-	http.HandleFunc("/api/nextdate", nextDateHandler)
-}
-
 func nextDateHandler(w http.ResponseWriter, r *http.Request) {
 	// GET-параметры: now, date, repeat
 	q := r.URL.Query()
