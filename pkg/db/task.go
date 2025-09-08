@@ -142,6 +142,41 @@ func TasksOnDate(dateYYYYMMDD string, limit int) ([]*Task, error) {
 	return out, nil
 }
 
+// GetTask возвращает задачу по id (строкой из запроса).
+func GetTask(id string) (*Task, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	row := DB.QueryRow(`SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?`, id)
+	var t Task
+	if err := row.Scan(&t.ID, &t.Date, &t.Title, &t.Comment, &t.Repeat); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// UpdateTask обновляет все поля по ID.
+func UpdateTask(task *Task) error {
+	if DB == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	res, err := DB.Exec(
+		`UPDATE scheduler SET date=?, title=?, comment=?, repeat=? WHERE id=?`,
+		task.Date, task.Title, task.Comment, task.Repeat, task.ID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("incorrect id for updating task")
+	}
+	return nil
+}
+
 // TruncateAll — утилита для тестов
 func TruncateAll(tx *sql.Tx) error {
 	_, err := tx.Exec(`DELETE FROM scheduler`)
