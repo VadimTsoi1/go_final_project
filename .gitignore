@@ -1,1 +1,7 @@
 scheduler.db
+
+# Runtime artifacts
+scheduler.db
+server.pid
+server.out
+server.err
