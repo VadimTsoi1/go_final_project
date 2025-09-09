@@ -1,13 +1,13 @@
 package api
 
 import (
-	"encoding/json"
-	"net/http"
-	"regexp"
-	"strings"
-	"time"
+    "encoding/json"
+    "net/http"
+    "regexp"
+    "strings"
+    "time"
 
-	"github.com/VadimTsoi1/go_final_project/pkg/db"
+    "github.com/VadimTsoi1/go_final_project/pkg/db"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -31,21 +31,17 @@ type addErr struct {
 }
 
 var (
-	repeatYear = regexp.MustCompile(`^y$`)
-	repeatDay  = regexp.MustCompile(`^d\s+-?\d+$`)
-	repeatWeek = regexp.MustCompile(`^w\s+[\d,\s]+$`)
-	repeatMon  = regexp.MustCompile(`^m(\s+[\d,\s]+(\s+[\d,\s-]+)?)?$`)
+    repeatYear = regexp.MustCompile(`^y$`)
+    repeatDay  = regexp.MustCompile(`^d\s+\d+$`)
 )
 
 func validRepeat(s string) bool {
-	if s == "" {
-		return true
-	}
-	s = strings.TrimSpace(s)
-	return repeatYear.MatchString(s) ||
-		repeatDay.MatchString(s) ||
-		repeatWeek.MatchString(s) ||
-		repeatMon.MatchString(s)
+    if s == "" {
+        return true
+    }
+    s = strings.TrimSpace(s)
+    // Разрешаем только базовые правила: y и d <N>
+    return repeatYear.MatchString(s) || repeatDay.MatchString(s)
 }
 
 func todayLocal() time.Time {
@@ -59,7 +55,7 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ожидаем JSON с полями-строками
+	// Считываем JSON из тела запроса
 	var in struct {
 		Date    string `json:"date"`
 		Title   string `json:"title"`
@@ -77,23 +73,40 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// дата: "today" или YYYYMMDD
-	var dateStr string
-	if strings.EqualFold(strings.TrimSpace(in.Date), "today") {
-		dateStr = todayLocal().Format(dateLayout)
-	} else {
-		if _, err := time.Parse(dateLayout, in.Date); err != nil {
-			writeJSON(w, http.StatusBadRequest, addErr{Error: "bad date"})
-			return
-		}
-		dateStr = in.Date
-	}
+	// Поддерживаем значение "today" и формат YYYYMMDD
+    var dateStr string
+    d := strings.TrimSpace(in.Date)
+    if d == "" || strings.EqualFold(d, "today") {
+        dateStr = todayLocal().Format(dateLayout)
+    } else {
+        if _, err := time.Parse(dateLayout, d); err != nil {
+            writeJSON(w, http.StatusBadRequest, addErr{Error: "bad date"})
+            return
+        }
+        dateStr = d
+    }
 
-	// repeat — минимальная валидность
-	if !validRepeat(in.Repeat) {
-		writeJSON(w, http.StatusBadRequest, addErr{Error: "bad repeat"})
-		return
-	}
+	// Проверяем корректность значения repeat
+    if !validRepeat(in.Repeat) {
+        writeJSON(w, http.StatusBadRequest, addErr{Error: "bad repeat"})
+        return
+    }
+
+    // Если дата в прошлом — корректируем: без repeat -> сегодня, с repeat -> следующая по правилу
+    today := todayLocal().Format(dateLayout)
+    if dateStr < today {
+        if strings.TrimSpace(in.Repeat) == "" {
+            dateStr = today
+        } else {
+            now := todayLocal()
+            next, err := NextDate(now, d, strings.TrimSpace(in.Repeat))
+            if err != nil {
+                writeJSON(w, http.StatusBadRequest, addErr{Error: "bad repeat"})
+                return
+            }
+            dateStr = next
+        }
+    }
 
 	id, err := db.AddTask(&db.Task{
 		Date:    dateStr,

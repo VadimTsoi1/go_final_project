@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Task — модель строки таблицы scheduler.
+// Task - модель задачи, строка в таблице scheduler.
 type Task struct {
 	ID      int64  `json:"id,omitempty"`
 	Date    string `json:"date"`
@@ -14,7 +14,7 @@ type Task struct {
 	Repeat  string `json:"repeat,omitempty"`
 }
 
-// AddTask вставляет новую задачу и возвращает id строкой.
+// AddTask добавляет задачу и возвращает её id (как строку).
 func AddTask(t *Task) (string, error) {
 	if DB == nil {
 		return "", fmt.Errorf("db not initialized")
@@ -33,7 +33,8 @@ func AddTask(t *Task) (string, error) {
 	return fmt.Sprint(id), nil
 }
 
-// Tasks возвращает ближайшие задачи (дата >= fromDate), сортировка по дате↑, затем id↑, ограничение limit.
+// Tasks возвращает будущие задачи (date >= fromDate),
+// отсортированные по date и id, с ограничением limit.
 func Tasks(fromDate string, limit int) ([]*Task, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("db not initialized")
@@ -42,11 +43,11 @@ func Tasks(fromDate string, limit int) ([]*Task, error) {
 		limit = 50
 	}
 	rows, err := DB.Query(`
-		SELECT id, date, title, comment, repeat
-		  FROM scheduler
-		 WHERE date >= ?
-		 ORDER BY date, id
-		 LIMIT ?`, fromDate, limit)
+        SELECT id, date, title, comment, repeat
+          FROM scheduler
+         WHERE date >= ?
+         ORDER BY date, id
+         LIMIT ?`, fromDate, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func Tasks(fromDate string, limit int) ([]*Task, error) {
 	return out, nil
 }
 
-// TasksSearch возвращает задачи по подстроке в title/comment.
+// TasksSearch ищет задачи по подстроке в title/comment.
 func TasksSearch(search string, limit int) ([]*Task, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("db not initialized")
@@ -79,11 +80,11 @@ func TasksSearch(search string, limit int) ([]*Task, error) {
 	}
 	like := "%" + search + "%"
 	rows, err := DB.Query(`
-		SELECT id, date, title, comment, repeat
-		  FROM scheduler
-		 WHERE title LIKE ? OR comment LIKE ?
-		 ORDER BY date, id
-		 LIMIT ?`, like, like, limit)
+        SELECT id, date, title, comment, repeat
+          FROM scheduler
+         WHERE title LIKE ? OR comment LIKE ?
+         ORDER BY date, id
+         LIMIT ?`, like, like, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -115,11 +116,11 @@ func TasksOnDate(dateYYYYMMDD string, limit int) ([]*Task, error) {
 		limit = 50
 	}
 	rows, err := DB.Query(`
-		SELECT id, date, title, comment, repeat
-		  FROM scheduler
-		 WHERE date = ?
-		 ORDER BY date, id
-		 LIMIT ?`, dateYYYYMMDD, limit)
+        SELECT id, date, title, comment, repeat
+          FROM scheduler
+         WHERE date = ?
+         ORDER BY date, id
+         LIMIT ?`, dateYYYYMMDD, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func TasksOnDate(dateYYYYMMDD string, limit int) ([]*Task, error) {
 	return out, nil
 }
 
-// GetTask возвращает задачу по id (строкой из запроса).
+// GetTask возвращает задачу по id (ошибка, если не найдена).
 func GetTask(id string) (*Task, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("db not initialized")
@@ -155,7 +156,7 @@ func GetTask(id string) (*Task, error) {
 	return &t, nil
 }
 
-// UpdateTask обновляет все поля по ID.
+// UpdateTask обновляет поля задачи по ID.
 func UpdateTask(task *Task) error {
 	if DB == nil {
 		return fmt.Errorf("db not initialized")
@@ -177,8 +178,46 @@ func UpdateTask(task *Task) error {
 	return nil
 }
 
-// TruncateAll — утилита для тестов
+// TruncateAll полностью очищает таблицу (для тестов).
 func TruncateAll(tx *sql.Tx) error {
 	_, err := tx.Exec(`DELETE FROM scheduler`)
 	return err
+}
+
+// DeleteTask удаляет задачу по id.
+func DeleteTask(id string) error {
+	if DB == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	res, err := DB.Exec(`DELETE FROM scheduler WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("incorrect id for deleting task")
+	}
+	return nil
+}
+
+// UpdateDate обновляет только поле date у задачи.
+func UpdateDate(next string, id string) error {
+	if DB == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	res, err := DB.Exec(`UPDATE scheduler SET date=? WHERE id=?`, next, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("incorrect id for updating date")
+	}
+	return nil
 }
