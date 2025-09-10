@@ -27,6 +27,7 @@ func main() {
     if err := db.Init(dbFile, true); err != nil {
         log.Fatalf("db init: %v", err)
     }
+    defer db.Close()
 
     // Регистрируем HTTP-обработчики API
     api.Init()
@@ -41,4 +42,3 @@ func main() {
         log.Fatalf("server failed: %v", err)
     }
 }
-

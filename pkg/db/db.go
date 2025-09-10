@@ -48,3 +48,12 @@ func Init(filename string, install bool) error {
     return nil
 }
 
+// Close closes the global DB connection.
+func Close() error {
+    if DB != nil {
+        err := DB.Close()
+        DB = nil
+        return err
+    }
+    return nil
+}
